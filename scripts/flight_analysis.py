@@ -15,8 +15,7 @@ def validate_date(date_str):
         return date_str
     except ValueError as exc:
         raise argparse.ArgumentTypeError(
-            f"Invalid date format: {date_str}. Use YYYY-MM-DD"
-        ) from exc
+            f"Invalid date format: {date_str}. Use YYYY-MM-DD") from exc
 
 
 def load_airport_data(spark, csv_path):
@@ -33,10 +32,8 @@ def load_airport_data(spark, csv_path):
             col("_c2").alias("city"),
             col("_c3").alias("country"),
             col("_c4").alias("iata"),
-            col("_c9").cast("integer").alias("timezone_offset"),
-        )
-        .filter(col("iata").isNotNull())
-    )
+            col("_c9").cast("integer").alias("timezone_offset"))
+        .filter(col("iata").isNotNull()))
 
 
 def load_booking_data(spark, json_path, start_date=None, end_date=None):
@@ -48,9 +45,7 @@ def load_booking_data(spark, json_path, start_date=None, end_date=None):
         spark.read.option("mode", "PERMISSIVE")
         .json(json_path)
         .withColumn(
-            "flights", explode(col("event.DataElement.travelrecord.productsList"))
-        )
-    )
+            "flights", explode(col("event.DataElement.travelrecord.productsList"))))
 
     # Filter out rows with corrupt records
     if "_corrupt_record" in df.columns:
@@ -64,16 +59,13 @@ def load_booking_data(spark, json_path, start_date=None, end_date=None):
         col("flights.flight.destinationAirport").alias("destination"),
         col("flights.bookingStatus").alias("status"),
         explode(col("event.DataElement.travelrecord.passengersList")).alias(
-            "passenger"
-        ),
-    )
+            "passenger"))
 
     # Get min and max dates if not provided
     if not start_date or not end_date:
         date_bounds = df.select(
             min("departure_date").alias("min_date"),
-            max("departure_date").alias("max_date"),
-        ).collect()[0]
+            max("departure_date").alias("max_date")).collect()[0]
 
         if not start_date:
             start_date = date_bounds.min_date
@@ -87,15 +79,13 @@ def load_booking_data(spark, json_path, start_date=None, end_date=None):
         "origin",
         "destination",
         "status",
-        col("passenger.age").cast("integer").alias("age"),
-    )
+        col("passenger.age").cast("integer").alias("age"))
 
     # Filter for confirmed bookings and apply date range
     df = (
         df.filter(col("status") == "CONFIRMED")
         .filter(col("departure_date") >= start_date)
-        .filter(col("departure_date") <= end_date)
-    )
+        .filter(col("departure_date") <= end_date))
 
     # Filter for KLM flights
     df = df.filter(col("airline") == "KL")
@@ -110,9 +100,7 @@ def analyze_bookings(bookings_df, airports_df):
     # Join with airports to get timezone offset information
     enriched_df = bookings_df.alias("bookings").join(
         airports_df.alias("airports"),
-        col("bookings.destination") == col("airports.iata"),
-        "inner",
-    )
+        col("bookings.destination") == col("airports.iata"), "inner")
 
     # Convert UTC departure time to local time using timezone offset
     enriched_df = enriched_df.withColumn(
@@ -120,9 +108,7 @@ def analyze_bookings(bookings_df, airports_df):
     ).withColumn(
         "local_departure",
         from_unixtime(
-            unix_timestamp(col("departure_date")) + col("minutes_to_add") * 60
-        ),
-    )
+            unix_timestamp(col("departure_date")) + col("minutes_to_add") * 60))
 
     # Add season and day of week
     enriched_df = enriched_df.withColumn(
@@ -140,10 +126,8 @@ def analyze_bookings(bookings_df, airports_df):
             count("*").alias("number_of_passengers"),
             round(avg("age"), 1).alias("average_age"),
             min("age").alias("youngest_age"),
-            max("age").alias("oldest_age"),
-        )
-        .orderBy(desc("number_of_passengers"))
-    )
+            max("age").alias("oldest_age"))
+        .orderBy(desc("number_of_passengers")))
 
     return popularity
 
@@ -156,30 +140,23 @@ def parse_arguments():
     parser.add_argument(
         "--booking-path",
         default="/opt/bitnami/spark/data/bookings/booking.json",
-        help="Path to booking data JSON file",
-    )
+        help="Path to booking data JSON file")
     parser.add_argument(
         "--airport-path",
         default="/opt/bitnami/spark/data/airports/airports.dat",
-        help="Path to airport data CSV file",
-    )
+        help="Path to airport data CSV file")
     parser.add_argument(
         "--start-date",
         type=validate_date,
-        help="Start date (YYYY-MM-DD) - optional, defaults to earliest date in data",
-    )
+        help="Start date (YYYY-MM-DD) - optional, defaults to earliest date in data")
     parser.add_argument(
         "--end-date",
         type=validate_date,
-        help="End date (YYYY-MM-DD) - optional, defaults to latest date in data",
-    )
+        help="End date (YYYY-MM-DD) - optional, defaults to latest date in data")
     parser.add_argument(
-        "--no-print", action="store_true", help="Do not print results in terminal"
-    )
+        "--no-print", action="store_true", help="Do not print results in terminal")
     parser.add_argument("--csv", action="store_true", help="Save results as CSV")
-    parser.add_argument(
-        "--parquet", action="store_true", help="Save results as Parquet"
-    )
+    parser.add_argument("--parquet", action="store_true", help="Save results as Parquet")
     return parser.parse_args()
 
 
@@ -190,8 +167,7 @@ if __name__ == "__main__":
         SparkSession.builder.appName("KLM Flight Analysis")
         .master("spark://spark-master:7077")
         .config("spark.driver.host", "spark-master")
-        .getOrCreate()
-    )
+        .getOrCreate())
 
     BOOKING_PATH = args.booking_path
     AIRPORTS_PATH = args.airport_path
@@ -210,8 +186,7 @@ if __name__ == "__main__":
     bookings_df = bookings_df.alias("bookings").join(
         nl_airports_df.alias("nl_airports").select("iata"),
         col("bookings.origin") == col("nl_airports.iata"),
-        "inner",
-    )
+        "inner")
 
     results = analyze_bookings(bookings_df, airports_df)
 
